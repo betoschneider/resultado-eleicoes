@@ -1,0 +1,20 @@
+[project]
+name = "resultado-eleicoes"
+version = "0.1.0"
+description = "Acompanhamento e evolução da apuração das Eleições 2026 do TSE"
+readme = "README.md"
+authors = [
+    { name = "Roberto Schneider", email = "roberto.schneider@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "streamlit>=1.30.0",
+    "pandas>=2.0.0",
+    "requests>=2.28.0",
+    "plotly>=5.15.0",
+    "python-dotenv>=1.0.0"
+]
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"

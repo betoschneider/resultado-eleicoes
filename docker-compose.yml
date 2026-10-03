@@ -1,0 +1,18 @@
+services:
+  apuracao:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: apuracao-eleicoes
+    restart: unless-stopped
+    ports:
+      - "8540:8540"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp
