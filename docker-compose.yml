@@ -10,9 +10,16 @@ services:
     env_file:
       - .env
     volumes:
-      - ./data:/app/data
+      # Volume nomeado gerenciado pelo Docker: a posse inicial é herdada de
+      # /app/data (já pertencente ao appuser) definida no Dockerfile.
+      # Evita o problema de bind mount criado como root no host, que impede
+      # o appuser (UID 1000) de criar o arquivo SQLite.
+      - eleicoes_data:/app/data
     security_opt:
       - no-new-privileges:true
     read_only: false
     tmpfs:
       - /tmp
+
+volumes:
+  eleicoes_data:

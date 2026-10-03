@@ -20,7 +20,16 @@ logger = logging.getLogger("database")
 
 def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
     """Cria e retorna uma conexão com o SQLite otimizada com WAL mode."""
-    conn = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
+    try:
+        conn = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
+    except sqlite3.OperationalError as exc:
+        data_dir = os.path.dirname(os.path.abspath(db_path))
+        if not os.access(data_dir, os.W_OK):
+            raise PermissionError(
+                f"Sem permissão de escrita no diretório do banco: {data_dir}. "
+                f"Verifique a posse/permissões do volume (precisa ser gravável pelo UID {os.getuid()})."
+            ) from exc
+        raise
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
@@ -30,7 +39,13 @@ def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
 
 def init_db(db_path: str = DB_PATH):
     """Inicializa as tabelas do banco de dados relacional se não existirem."""
-    os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
+    data_dir = os.path.dirname(os.path.abspath(db_path))
+    os.makedirs(data_dir, exist_ok=True)
+    if not os.access(data_dir, os.W_OK):
+        raise PermissionError(
+            f"Diretório do banco não é gravável: {data_dir}. "
+            f"Ajuste a posse/permissões do volume para o UID {os.getuid()} (appuser)."
+        )
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
 
