@@ -189,54 +189,11 @@ else:
     # ==========================================================================
     # VISUALIZAÇÃO DOS CANDIDATOS
     # ==========================================================================
-    tab_classificacao, tab_evolucao, tab_historico = st.tabs([
-        "🏆 Classificação Atual",
+    tab_evolucao, tab_classificacao, tab_historico = st.tabs([
         "📈 Evolução Temporal dos Votos",
+        "🏆 Classificação Atual",
         "📋 Histórico de Snapshots"
     ])
-
-    with tab_classificacao:
-        st.subheader("Classificação dos Candidatos")
-
-        if not df_candidatos.empty:
-            df_plot = df_candidatos.copy()
-            df_plot["rotulo"] = df_plot["nome"] + " (" + df_plot["numero"] + ")"
-            df_plot = df_plot.sort_values(by="votos_apurados", ascending=True)
-
-            fig_bar = px.bar(
-                df_plot,
-                x="pct_votos_apurados",
-                y="rotulo",
-                orientation="h",
-                text=df_plot["pct_votos_apurados"].apply(lambda x: f"{x:.2f}%"),
-                labels={"pct_votos_apurados": "% Votos Válidos", "rotulo": "Candidato"},
-                title=f"Percentual de Votos por Candidato — Eleições 2026 ({turno_selecionado}º Turno)",
-                color="pct_votos_apurados",
-                color_continuous_scale="Viridis"
-            )
-            fig_bar.update_layout(height=450, showlegend=False, xaxis=dict(range=[0, max(20.0, df_candidatos['pct_votos_apurados'].max() + 5)]))
-            st.plotly_chart(fig_bar, use_container_width=True)
-
-            # Tabela de dados formatada
-            st.markdown("#### Detalhes por Candidato")
-            df_show = df_candidatos[[
-                "numero", "nome", "partido_coligacao", "vice", "votos_apurados", "pct_votos_apurados", "situacao"
-            ]].copy()
-
-            df_show.columns = [
-                "Nº", "Candidato(a)", "Partido / Coligação", "Vice", "Votos Apurados", "% Votos Válidos", "Situação"
-            ]
-
-            df_show["Votos Apurados"] = df_show["Votos Apurados"].apply(lambda v: f"{v:,}".replace(",", "."))
-            df_show["% Votos Válidos"] = df_show["% Votos Válidos"].apply(lambda p: f"{p:.2f}%")
-
-            st.dataframe(
-                df_show,
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.info("Nenhum dado de candidatos disponível para este snapshot.")
 
     with tab_evolucao:
         st.subheader("Evolução Temporal da Apuração")
@@ -302,6 +259,51 @@ else:
             st.plotly_chart(fig_abs, use_container_width=True)
         else:
             st.info("Aguardando novas fotografias (snapshots) do TSE para traçar a evolução temporal.")
+
+    with tab_classificacao:
+        st.subheader("Classificação dos Candidatos")
+
+        if not df_candidatos.empty:
+            df_plot = df_candidatos.copy()
+            df_plot["rotulo"] = df_plot["nome"] + " (" + df_plot["numero"] + ")"
+            df_plot = df_plot.sort_values(by="votos_apurados", ascending=True)
+
+            fig_bar = px.bar(
+                df_plot,
+                x="pct_votos_apurados",
+                y="rotulo",
+                orientation="h",
+                text=df_plot["pct_votos_apurados"].apply(lambda x: f"{x:.2f}%"),
+                labels={"pct_votos_apurados": "% Votos Válidos", "rotulo": "Candidato"},
+                title=f"Percentual de Votos por Candidato — Eleições 2026 ({turno_selecionado}º Turno)",
+                color="pct_votos_apurados",
+                color_continuous_scale="Viridis"
+            )
+            fig_bar.update_layout(height=450, showlegend=False, xaxis=dict(range=[0, max(20.0, df_candidatos['pct_votos_apurados'].max() + 5)]))
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+            # Tabela de dados formatada
+            st.markdown("#### Detalhes por Candidato")
+            df_show = df_candidatos[[
+                "numero", "nome", "partido_coligacao", "vice", "votos_apurados", "pct_votos_apurados", "situacao"
+            ]].copy()
+
+            df_show.columns = [
+                "Nº", "Candidato(a)", "Partido / Coligação", "Vice", "Votos Apurados", "% Votos Válidos", "Situação"
+            ]
+
+            df_show["Votos Apurados"] = df_show["Votos Apurados"].apply(lambda v: f"{v:,}".replace(",", "."))
+            df_show["% Votos Válidos"] = df_show["% Votos Válidos"].apply(lambda p: f"{p:.2f}%")
+
+            st.dataframe(
+                df_show,
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("Nenhum dado de candidatos disponível para este snapshot.")
+
+
 
     with tab_historico:
         st.subheader("Histórico Completo de Fotografias (Snapshots)")
