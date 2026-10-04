@@ -8,6 +8,7 @@ Em total conformidade com as especificações técnicas oficiais de 2026 (-u.jso
 
 import time
 import os
+import random
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -34,6 +35,32 @@ from database import (
 )
 from tse_client import TSEClient
 from worker import generate_simulated_snapshot
+
+# Cores fixas por número do candidato. Os demais recebem uma cor pseudoaleatória
+# estável (mesma a cada renderização, mesmo com a auto-atualização ligada).
+CORES_FIXAS_CANDIDATO = {
+    "22": "#00008B",  # FLAVIO BOLSONARO - azul escuro
+    "13": "#FF0000",  # LULA - vermelho
+}
+
+# Quantos candidatos (melhores colocados por % de votos válidos) aparecem nos
+# gráficos de evolução e, consequentemente, no tooltip.
+TOP_N_EVOLUCAO = 6
+
+
+def _cor_pseudoaleatoria(numero) -> str:
+    """Gera uma cor estável (derivada do número do candidato) em formato hexadecimal."""
+    rnd = random.Random(str(numero))
+    return f"#{rnd.randint(0, 0xFFFFFF):06X}"
+
+
+def mapa_cores_candidatos(df: pd.DataFrame) -> dict:
+    """Mapeia o nome de cada candidato para uma cor fixa (principais) ou pseudoaleatória."""
+    cores = {}
+    for numero, nome in df[["numero", "nome"]].drop_duplicates().itertuples(index=False):
+        cores[nome] = CORES_FIXAS_CANDIDATO.get(str(numero), _cor_pseudoaleatoria(numero))
+    return cores
+
 
 # Configuração da página do Streamlit
 st.set_page_config(
@@ -213,13 +240,30 @@ else:
 
     with tab_evolucao:
         st.subheader("Evolução Temporal da Apuração")
+        st.caption(f"Dica: o tooltip mostra apenas os {TOP_N_EVOLUCAO} candidatos mais bem colocados (por % de votos válidos).")
 
         if not df_evolucao.empty and len(df_snapshots) > 1:
+            # Ranking mais recente por % de votos (decrescente).
+            ordem_candidatos = (
+                df_evolucao.sort_values("dt_hr_tse")
+                .groupby("nome", as_index=False)
+                .tail(1)
+                .sort_values("pct_votos_apurados", ascending=False)["nome"]
+                .tolist()
+            )
+            # Mantém nos gráficos apenas os N melhores colocados, de modo que o
+            # tooltip (hover unificado) exiba exatamente esses candidatos.
+            top_candidatos = ordem_candidatos[:TOP_N_EVOLUCAO]
+            df_evolucao_top = df_evolucao[df_evolucao["nome"].isin(top_candidatos)]
+            cores_mapa = mapa_cores_candidatos(df_evolucao_top)
+
             fig_line = px.line(
-                df_evolucao,
+                df_evolucao_top,
                 x="pct_secoes_totalizadas",
                 y="pct_votos_apurados",
                 color="nome",
+                color_discrete_map=cores_mapa,
+                category_orders={"nome": top_candidatos},
                 markers=True,
                 labels={
                     "pct_secoes_totalizadas": "% Seções Apuradas",
@@ -237,10 +281,12 @@ else:
             st.plotly_chart(fig_line, use_container_width=True)
 
             fig_abs = px.line(
-                df_evolucao,
+                df_evolucao_top,
                 x="pct_secoes_totalizadas",
                 y="votos_apurados",
                 color="nome",
+                color_discrete_map=cores_mapa,
+                category_orders={"nome": top_candidatos},
                 markers=True,
                 labels={
                     "pct_secoes_totalizadas": "% Seções Apuradas",
