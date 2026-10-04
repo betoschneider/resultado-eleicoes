@@ -46,91 +46,47 @@ st.set_page_config(
 # Inicializa banco de dados se necessário
 init_db(DB_PATH)
 
+# Configurações carregadas do .env (sem seleção manual na interface)
+ciclo_selecionado = CICLO_PADRAO
+turno_selecionado = TURNO_PADRAO
+cod_eleicao_selecionado = COD_ELEICAO_1T if turno_selecionado == 1 else COD_ELEICAO_2T
+tse_url = build_tse_url(ciclo=ciclo_selecionado, cod_eleicao=cod_eleicao_selecionado, turno=turno_selecionado)
+
 # ==============================================================================
-# BARRA LATERAL (CONFIGURAÇÕES E FILTROS)
+# CABEÇALHO E CONTROLES
 # ==============================================================================
-with st.sidebar:
-    st.header("🗳️ Eleições 2026")
-    st.caption("Ambiente Oficial de Produção - TSE")
-    st.divider()
+st.title(f"🗳️ Eleições Presidenciais 2026 — {turno_selecionado}º Turno")
 
-    ciclo_selecionado = "ele2026"
+col_auto, col_atualizar, col_consultar = st.columns([1, 1, 1])
 
-    turno_selecionado = st.radio(
-        "Turno",
-        options=[1, 2],
-        index=0 if TURNO_PADRAO == 1 else 1,
-        format_func=lambda x: f"{x}º Turno",
-        horizontal=True
-    )
-
-    default_cod = COD_ELEICAO_1T if turno_selecionado == 1 else COD_ELEICAO_2T
-
-    cod_eleicao_input = st.text_input(
-        "Código da Eleição no TSE",
-        value=default_cod,
-        help="Código oficial atribuído pelo TSE para a totalização presidencial de 2026."
-    )
-
-    tse_url = build_tse_url(ciclo=ciclo_selecionado, cod_eleicao=cod_eleicao_input, turno=turno_selecionado)
-    st.markdown(f"""
-    <small><b>Endpoint Oficial do TSE:</b><br>
-    <a href="{tse_url}" target="_blank" style="word-break: break-all;">{tse_url}</a></small>
-    """, unsafe_allow_html=True)
-
-    st.divider()
-
-    st.subheader("⚙️ Ações e Coleta")
-    col_act1, col_act2 = st.columns(2)
-
-    with col_act1:
-        if st.button("🔄 Atualizar", use_container_width=True, help="Recarrega a visualização"):
-            st.rerun()
-
-    with col_act2:
-        if st.button("🌐 Consultar TSE", use_container_width=True, help="Faz uma requisição imediata à API oficial do TSE"):
-            with st.spinner("Consultando API do TSE..."):
-                client = TSEClient()
-                data = client.fetch_url(tse_url)
-                if data and ("cand" in data or "carg" in data):
-                    novo = save_snapshot(data, ciclo_selecionado, cod_eleicao_input, turno_selecionado, DB_PATH)
-                    if novo:
-                        st.success("Novo snapshot coletado com sucesso!")
-                    else:
-                        st.info("Dados do TSE sem alterações desde a última consulta.")
-                else:
-                    st.info("ℹ️ Dados ainda não disponibilizados pelo TSE no ambiente oficial.")
-            st.rerun()
-
-    # if st.button("🗑️ Limpar Base de Dados", use_container_width=True, help="Remove os snapshots da base para resetar a apuração"):
-    #     with get_connection(DB_PATH) as conn:
-    #         conn.execute("DELETE FROM apuracao_candidatos;")
-    #         conn.execute("DELETE FROM apuracao_snapshots;")
-    #         conn.commit()
-    #     st.success("Base de dados limpa com sucesso!")
-    #     st.rerun()
-
-    # Painel de simulação para testes (apenas se TSE_SIMULATE estiver ativo no .env)
-    if SIMULATE:
-        with st.expander("🛠️ Simulação para Testes (Modo Mock)"):
-            st.caption("Gera snapshots com porcentagens progressivas para testar os gráficos sem conexão com o TSE.")
-            sim_pct = st.slider("Avanço das Seções (%)", min_value=1.0, max_value=100.0, value=50.0, step=5.0)
-            if st.button("Adicionar Snapshot Simulado"):
-                sim_data = generate_simulated_snapshot(ciclo_selecionado, turno_selecionado, sim_pct)
-                save_snapshot(sim_data, ciclo_selecionado, cod_eleicao_input, turno_selecionado, DB_PATH)
-                st.success(f"Snapshot com {sim_pct}% adicionado ao banco!")
-                st.rerun()
-
-    st.divider()
-
-    # Auto-refresh
-    auto_refresh = st.checkbox("Auto-atualização periódica", value=False)
+with col_auto:
+    auto_refresh = st.checkbox("Auto-atualização periódica", value=True)
+    refresh_interval = None
     if auto_refresh:
-        refresh_interval = st.slider("Intervalo (segundos)", min_value=5, max_value=120, value=30, step=5)
-        st.caption(f"A tela atualizará automaticamente a cada {refresh_interval}s.")
-        time.sleep(refresh_interval)
+        refresh_interval = st.slider("Intervalo de atualização (segundos)", min_value=5, max_value=300, value=60, step=5)
+
+with col_atualizar:
+    if st.button("🔄 Atualizar", use_container_width=True, help="Recarrega a visualização"):
         st.rerun()
 
+# with col_consultar:
+    # if st.button("🌐 Consultar TSE", use_container_width=True, help="Faz uma requisição imediata à API oficial do TSE"):
+    #     with st.spinner("Consultando API do TSE..."):
+    #         client = TSEClient()
+    #         data = client.fetch_url(tse_url)
+    #         if data and ("cand" in data or "carg" in data):
+    #             novo = save_snapshot(data, ciclo_selecionado, cod_eleicao_selecionado, turno_selecionado, DB_PATH)
+    #             if novo:
+    #                 st.success("Novo snapshot coletado com sucesso!")
+    #             else:
+    #                 st.info("Dados do TSE sem alterações desde a última consulta.")
+    #         else:
+    #             st.info("ℹ️ Dados ainda não disponibilizados pelo TSE no ambiente oficial.")
+    #     st.rerun()
+
+# refresh_interval = None
+# if auto_refresh:
+#     refresh_interval = st.slider("Intervalo de atualização (segundos)", min_value=5, max_value=300, value=60, step=5)
 
 # ==============================================================================
 # CARREGAMENTO DOS DADOS
@@ -138,12 +94,6 @@ with st.sidebar:
 resumo, df_candidatos = get_latest_snapshot(ciclo_selecionado, turno_selecionado, DB_PATH)
 df_evolucao = get_candidates_evolution(ciclo_selecionado, turno_selecionado, DB_PATH)
 df_snapshots = get_all_snapshots(ciclo_selecionado, turno_selecionado, DB_PATH)
-
-
-# ==============================================================================
-# CABEÇALHO PRINCIPAL
-# ==============================================================================
-st.title(f"🗳️ Eleições Presidenciais 2026 — {turno_selecionado}º Turno")
 
 if resumo is None:
     st.info(
@@ -336,3 +286,32 @@ else:
             mime="text/csv",
             use_container_width=True
         )
+
+# ==============================================================================
+# PAINEL DE SIMULAÇÃO (apenas se TSE_SIMULATE estiver ativo no .env)
+# ==============================================================================
+if SIMULATE:
+    with st.expander("🛠️ Simulação para Testes (Modo Mock)"):
+        st.caption("Gera snapshots com porcentagens progressivas para testar os gráficos sem conexão com o TSE.")
+        sim_pct = st.slider("Avanço das Seções (%)", min_value=1.0, max_value=100.0, value=50.0, step=5.0)
+        if st.button("Adicionar Snapshot Simulado"):
+            sim_data = generate_simulated_snapshot(ciclo_selecionado, turno_selecionado, sim_pct)
+            save_snapshot(sim_data, ciclo_selecionado, cod_eleicao_selecionado, turno_selecionado, DB_PATH)
+            st.success(f"Snapshot com {sim_pct}% adicionado ao banco!")
+            st.rerun()
+
+# ==============================================================================
+# ENDPOINT OFICIAL DO TSE
+# ==============================================================================
+st.divider()
+st.markdown(f"""
+<small><b>Endpoint Oficial do TSE:</b><br>
+<a href="{tse_url}" target="_blank" style="word-break: break-all;">{tse_url}</a></small>
+""", unsafe_allow_html=True)
+
+# ==============================================================================
+# AUTO-ATUALIZAÇÃO (ao final, para não bloquear a renderização da página)
+# ==============================================================================
+if auto_refresh and refresh_interval:
+    time.sleep(refresh_interval)
+    st.rerun()
