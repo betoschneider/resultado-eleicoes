@@ -4,6 +4,8 @@ Cliente HTTP especializado para consumo dos dados oficiais do TSE.
 Inclui cabeçalhos adequados, tratamento de erros de rede (404, 429, timeouts).
 """
 
+import base64
+import json
 import requests
 import logging
 from typing import Dict, Any, Optional
@@ -19,16 +21,41 @@ class TSEClient:
         self.session = requests.Session()
         self.session.headers.update(HTTP_HEADERS)
 
+    def _decode_response(self, response) -> Optional[Dict[str, Any]]:
+        """
+        Decodifica a resposta do TSE. Suporta dois formatos:
+        - JSON puro (simulado, .json)
+        - JWS compacto 'header.payload.signature' (oficial, .jws), cujo payload contém o JSON.
+        """
+        texto = (response.text or "").strip()
+        if not texto:
+            return None
+
+        # JWS compacto: três segmentos separados por '.' e não começa com '{'
+        if not texto.startswith("{") and texto.count(".") >= 2:
+            try:
+                payload_b64 = texto.split(".")[1]
+                payload_b64 += "=" * (-len(payload_b64) % 4)
+                return json.loads(base64.urlsafe_b64decode(payload_b64).decode("utf-8"))
+            except (IndexError, ValueError, json.JSONDecodeError) as exc:
+                logger.error(f"Falha ao decodificar o payload JWS do TSE: {exc}")
+                return None
+
+        try:
+            return response.json()
+        except ValueError:
+            logger.warning("Resposta do TSE não é JSON nem JWS válido.")
+            return None
+
     def fetch_url(self, url: str) -> Optional[Dict[str, Any]]:
         """
-        Executa requisição GET ao endpoint JSON do TSE com tratamento de exceções.
+        Executa requisição GET ao endpoint do TSE com tratamento de exceções.
         """
         try:
             response = self.session.get(url, timeout=self.timeout)
             
             if response.status_code == 200:
-                data = response.json()
-                return data
+                return self._decode_response(response)
             elif response.status_code == 404:
                 logger.info(f"Dados ainda não disponibilizados pelo TSE no ambiente oficial (404): {url}")
                 return None

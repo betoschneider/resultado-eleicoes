@@ -6,6 +6,7 @@ Em total conformidade com a documentação técnica oficial das Eleições 2026 
 
 import os
 import json
+import time
 from pathlib import Path
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
@@ -25,20 +26,27 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = os.getenv("ELEICOES_DB_PATH", str(DATA_DIR / "eleicoes.db"))
 CSV_OUTPUT_PATH = os.getenv("ELEICOES_CSV_PATH", str(BASE_DIR / "resultado.csv"))
 
-# Configuração da API do TSE para 2026
-TSE_BASE_URL = os.getenv("TSE_BASE_URL", "https://resultados-sim.tse.jus.br/simulado")
-TSE_AMBIENTE = os.getenv("TSE_AMBIENTE", "simulado2026")
+# Configuração da API do TSE para 2026 (ambiente oficial de produção)
+TSE_BASE_URL = os.getenv("TSE_BASE_URL", "https://resultados.tse.jus.br/oficial")
+TSE_AMBIENTE = os.getenv("TSE_AMBIENTE", "")
 CICLO_PADRAO = "ele2026"
 TURNO_PADRAO = int(os.getenv("TURNO", "1"))
 
-# Códigos oficiais 2026:
-# 21270 = Eleição Ordinária Federal (Presidente)
-# 21272 = Eleição Ordinária Estadual (Governador, Senador, Deputados)
-COD_ELEICAO_1T = os.getenv("TSE_COD_ELEICAO_1T", "21270")
-COD_ELEICAO_2T = os.getenv("TSE_COD_ELEICAO_2T", "21271")
+# Códigos oficiais das eleições de 2026 (fonte: /oficial/comum/config/ele-c.jws -> pleito 3220):
+# 6257 = Eleição Ordinária Federal (Presidente) - 1º Turno  (2º turno: 6258)
+# 6259 = Eleição Ordinária Estadual - 1º Turno             (2º turno: 6260)
+# 6261 = Eleição Ordinária Municipal - 2026
+COD_ELEICAO_1T = os.getenv("TSE_COD_ELEICAO_1T", "6257")
+COD_ELEICAO_2T = os.getenv("TSE_COD_ELEICAO_2T", "6258")
 
 # Código do cargo no TSE (c0001 = Presidente da República, c0005 = Senador)
 COD_CARGO = os.getenv("TSE_COD_CARGO", "c0001")
+
+# Extensão dos arquivos de dados: "jws" (oficial, JWS compacto) ou "json" (simulado)
+TSE_EXTENSAO = os.getenv("TSE_EXTENSAO", "jws").strip().lower().lstrip(".") or "jws"
+
+# Unidade federativa padrão (br = consolidado nacional; zz = votação no exterior)
+TSE_UF_PADRAO = os.getenv("TSE_UF", "br").strip().lower()
 
 # Modo simulação local/mock (definido no .env para gerar dados aleatórios progressivos sem rede)
 SIMULATE = os.getenv("TSE_SIMULATE", "false").strip().lower() in ("true", "1", "t", "yes", "sim")
@@ -64,32 +72,41 @@ def build_tse_url(
     cod_eleicao: str = None,
     turno: int = 1,
     cargo: str = None,
-    uf: str = "br",
+    uf: str = None,
     ambiente: str = None,
-    base_url: str = None
+    base_url: str = None,
+    extensao: str = None,
+    nocache: bool = False
 ) -> str:
     """
     Constrói a URL oficial dos dados da apuração no TSE para as Eleições 2026.
-    Padrão oficial 2026: {base}/{ambiente}/{ciclo}/{cod_eleicao}/dados/{uf}/{uf}-{cargo}-e{cod_eleicao_6d}-u.json
-    Exemplos:
-    - Presidente (Brasil): .../dados/br/br-c0001-e021270-u.json
-    - Senador (SP): .../dados/sp/sp-c0005-e021272-u.json
+    Padrão oficial 2026: {base}/{ambiente}/{ciclo}/{cod_eleicao}/dados/{uf}/{uf}-{cargo}-e{cod_eleicao_6d}-u.{ext}
+    Exemplos (oficial, JWS):
+    - Presidente (Brasil): .../oficial/ele2026/6257/dados/br/br-c0001-e006257-u.jws
+    - Exterior (ZZ):        .../oficial/ele2026/6257/dados/zz/zz-c0001-e006257-u.jws
     """
     ciclo_alvo = ciclo or CICLO_PADRAO
     cargo_alvo = cargo or COD_CARGO
-    uf_alvo = uf.lower()
+    uf_alvo = (uf or TSE_UF_PADRAO).strip().lower()
     base = (base_url or TSE_BASE_URL).rstrip("/")
     amb = TSE_AMBIENTE if ambiente is None else ambiente
+    ext = (extensao or TSE_EXTENSAO).strip().lower().lstrip(".") or "jws"
 
     if cod_eleicao is None or cod_eleicao == "":
         cod_eleicao = COD_ELEICAO_1T if turno == 1 else COD_ELEICAO_2T
 
     cod_6d = str(cod_eleicao).zfill(6)
+    arquivo = f"{uf_alvo}-{cargo_alvo}-e{cod_6d}-u.{ext}"
 
     if amb:
-        return f"{base}/{amb}/{ciclo_alvo}/{cod_eleicao}/dados/{uf_alvo}/{uf_alvo}-{cargo_alvo}-e{cod_6d}-u.json"
+        url = f"{base}/{amb}/{ciclo_alvo}/{cod_eleicao}/dados/{uf_alvo}/{arquivo}"
     else:
-        return f"{base}/{ciclo_alvo}/{cod_eleicao}/dados/{uf_alvo}/{uf_alvo}-{cargo_alvo}-e{cod_6d}-u.json"
+        url = f"{base}/{ciclo_alvo}/{cod_eleicao}/dados/{uf_alvo}/{arquivo}"
+
+    if nocache:
+        url += f"?nocache={int(time.time() * 1000)}"
+
+    return url
 
 
 def load_lista_eleicoes(file_path: Optional[str] = None) -> Optional[Dict[str, Any]]:

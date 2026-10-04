@@ -32,18 +32,39 @@ class TestApuracaoSistema2026(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_url_builder_2026_presidente(self):
-        # Simulado Oficial
-        url_sim = build_tse_url("ele2026", cod_eleicao="21270", turno=1, ambiente="simulado2026", base_url="https://resultados-sim.tse.jus.br/simulado")
+        # Simulado Oficial (arquivos .json)
+        url_sim = build_tse_url("ele2026", cod_eleicao="21270", turno=1, ambiente="simulado2026", base_url="https://resultados-sim.tse.jus.br/simulado", extensao="json")
         self.assertEqual(url_sim, "https://resultados-sim.tse.jus.br/simulado/simulado2026/ele2026/21270/dados/br/br-c0001-e021270-u.json")
 
-        # Produção Oficial
-        url_prod = build_tse_url("ele2026", cod_eleicao="21270", turno=1, ambiente="", base_url="https://resultados.tse.jus.br/oficial")
-        self.assertEqual(url_prod, "https://resultados.tse.jus.br/oficial/ele2026/21270/dados/br/br-c0001-e021270-u.json")
+        # Produção Oficial (arquivos .jws, código oficial 6257)
+        url_prod = build_tse_url("ele2026", cod_eleicao="6257", turno=1, ambiente="", base_url="https://resultados.tse.jus.br/oficial")
+        self.assertEqual(url_prod, "https://resultados.tse.jus.br/oficial/ele2026/6257/dados/br/br-c0001-e006257-u.jws")
+
+        # Votação no Exterior (UF zz)
+        url_zz = build_tse_url("ele2026", cod_eleicao="6257", turno=1, uf="zz", ambiente="", base_url="https://resultados.tse.jus.br/oficial")
+        self.assertEqual(url_zz, "https://resultados.tse.jus.br/oficial/ele2026/6257/dados/zz/zz-c0001-e006257-u.jws")
 
     def test_url_builder_2026_senador(self):
-        # Endpoint de Senador (SP)
-        url_senador = build_tse_url("ele2026", cod_eleicao="21272", cargo="c0005", uf="sp", ambiente="simulado2026", base_url="https://resultados-sim.tse.jus.br/simulado")
+        # Endpoint de Senador (SP) no simulado (.json)
+        url_senador = build_tse_url("ele2026", cod_eleicao="21272", cargo="c0005", uf="sp", ambiente="simulado2026", base_url="https://resultados-sim.tse.jus.br/simulado", extensao="json")
         self.assertEqual(url_senador, "https://resultados-sim.tse.jus.br/simulado/simulado2026/ele2026/21272/dados/sp/sp-c0005-e021272-u.json")
+
+    def test_decode_jws_payload(self):
+        import base64
+        import json
+        from tse_client import TSEClient
+
+        payload = json.dumps({"ele": "6257", "t": "1", "s": {"pst": "7,59"}})
+        b64 = base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii").rstrip("=")
+        jws = "eyJhbGciOiJFZERTQSJ9." + b64 + ".assinatura"
+
+        class _FakeResponse:
+            status_code = 200
+            text = jws
+
+        dados = TSEClient()._decode_response(_FakeResponse())
+        self.assertEqual(dados["ele"], "6257")
+        self.assertEqual(dados["s"]["pst"], "7,59")
 
     def test_normalize_payload_2026(self):
         raw_2026 = {

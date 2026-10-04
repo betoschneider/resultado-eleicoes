@@ -172,7 +172,7 @@ def run_worker(
     turno_alvo = turno if turno is not None else TURNO_PADRAO
 
     if not custom_url:
-        target_url = build_tse_url(ciclo=ciclo_alvo, cod_eleicao=cod_eleicao, turno=turno_alvo)
+        target_url = build_tse_url(ciclo=ciclo_alvo, cod_eleicao=cod_eleicao, turno=turno_alvo, nocache=True)
     else:
         target_url = custom_url
 
