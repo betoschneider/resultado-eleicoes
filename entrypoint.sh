@@ -40,6 +40,20 @@ streamlit run app.py \
 APP_PID=$!
 echo "[Entrypoint] Streamlit iniciado na porta ${STREAMLIT_SERVER_PORT:-8540} (PID: $APP_PID)"
 
-# Aguarda qualquer um dos processos encerrar
-wait -n "$WORKER_PID" "$APP_PID" || true
-cleanup
+# Aguarda o término de qualquer um dos processos
+STATUS=0
+wait -n "$WORKER_PID" "$APP_PID" || STATUS=$?
+
+if kill -0 "$WORKER_PID" 2>/dev/null; then
+    # O worker continua vivo => o Streamlit encerrou; finaliza o container.
+    cleanup
+elif [ "$STATUS" -eq 0 ]; then
+    # Worker terminou com sucesso (ex.: apuração concluída em 100%).
+    # Mantém o dashboard no ar exibindo o resultado final, sem reiniciar o container.
+    echo "[Entrypoint] Worker finalizado com sucesso. Mantendo o dashboard ativo."
+    wait "$APP_PID" || true
+    cleanup
+else
+    echo "[Entrypoint] Worker terminou com erro (status $STATUS). Encerrando."
+    cleanup
+fi

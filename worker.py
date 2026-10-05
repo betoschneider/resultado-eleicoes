@@ -26,7 +26,7 @@ from config import (
     DB_PATH,
     build_tse_url
 )
-from database import init_db, save_snapshot, normalize_tse_payload
+from database import init_db, save_snapshot, normalize_tse_payload, parse_brazilian_number
 from tse_client import TSEClient
 
 logging.basicConfig(
@@ -37,6 +37,10 @@ logging.basicConfig(
 logger = logging.getLogger("worker")
 
 running = True
+
+# Encerramento automático ao fim da apuração
+APURACAO_COMPLETA_PCT = 100.0
+CONFIRMACOES_APURACAO_COMPLETA = 2  # consultas seguidas em 100% antes de parar o worker
 
 
 def handle_sigint(sig, frame):
@@ -187,11 +191,13 @@ def run_worker(
     logger.info("=" * 70)
 
     sim_step = 5.0
+    polls_completos = 0
 
     while running:
         logger.info(f"Iniciando consulta da apuração ({datetime.now().strftime('%H:%M:%S')})...")
         
         dados = None
+        pst_num = None
         if simulate:
             dados = generate_simulated_snapshot(ciclo=ciclo_alvo, turno=turno_alvo, step_pct=sim_step)
             sim_step = min(100.0, sim_step + random.uniform(5.0, 15.0))
@@ -202,6 +208,7 @@ def run_worker(
             norm_dados = normalize_tse_payload(dados)
             eleicao_str = str(norm_dados.get("ele", cod_eleicao or COD_ELEICAO_1T))
             pst = norm_dados.get("pst", "0,00")
+            pst_num = parse_brazilian_number(pst)
             dt = norm_dados.get("dt", "")
             ht = norm_dados.get("ht", "")
             
@@ -227,6 +234,19 @@ def run_worker(
                     f"Dados da apuração ainda não disponibilizados pelo TSE no ambiente oficial ({target_url}). "
                     f"Aguardando próxima checagem em {interval}s..."
                 )
+
+        # Encerra automaticamente ao atingir 100% das seções, aguardando algumas
+        # confirmações consecutivas para garantir a captura do snapshot final.
+        if pst_num is not None and pst_num >= APURACAO_COMPLETA_PCT:
+            polls_completos += 1
+            if polls_completos >= CONFIRMACOES_APURACAO_COMPLETA:
+                logger.info(
+                    f"Apuração concluída ({pst_num:.2f}% das seções totalizadas). "
+                    f"Encerrando worker após {polls_completos} confirmações."
+                )
+                break
+        else:
+            polls_completos = 0
 
         if run_once:
             logger.info("Execução única concluída (--once).")
